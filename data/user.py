@@ -11,4 +11,5 @@ class User(SqlAlchemyBase):
                            primary_key=True)
     name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     age = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)
-    location = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    lat = sqlalchemy.Column(sqlalchemy.INT, nullable=True)
+    lan = sqlalchemy.Column(sqlalchemy.INT, nullable=True)

@@ -9,8 +9,9 @@ class Spot(SqlAlchemyBase):
 
     id = sqlalchemy.Column(sqlalchemy.Integer,
                            primary_key=True, autoincrement=True)
-    user_id =   sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'), nullable=True)
+    user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey('users.id'), nullable=True)
     name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
-    coords = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    lat = sqlalchemy.Column(sqlalchemy.INT, nullable=True)
+    lon = sqlalchemy.Column(sqlalchemy.INT, nullable=True)
     photo = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     user = orm.relation('User')

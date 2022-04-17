@@ -1,4 +1,5 @@
 import logging
+from help_defs import is_float
 
 import requests
 import telegram
@@ -43,12 +44,11 @@ def help(update, context):
 def start_aut(update, context):
     db_sess = db_session.create_session()
     update.message.reply_text(
-        "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся:")
+        "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся введи мне своё имя")
     return 1
 
 
 def f_res(update, context):
-    global user
     name = update.message.text
     context.user_data['name'] = name
     if name.lower == 'admin':
@@ -67,6 +67,7 @@ def f_res(update, context):
 
         except:
             user_id = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
+            print(user_id)
             if user_id:
                 user = User()
                 user.name = name
@@ -81,6 +82,10 @@ def f_res(update, context):
         return ConversationHandler.END
 
 
+def rename(update, context):
+    if update.message.text.lower() == 'нет':
+
+
 def stop(update, context):
     murkup = user_keyboard(context)
     update.message.reply_text('reg stop', reply_markup=murkup)
@@ -91,20 +96,36 @@ def stop(update, context):
 def start_locating(update, context):
     db_sess = db_session.create_session()
     update.message.reply_text(
-        "Давай ты напишешь нам своё местопнахождения, что бы мы могли найти ближайшие споты для тебя:")
+        "Отлично, давай определим твоё мостоположение. Напиши мне свою широту и долготу"
+        " (можешь найти в яндекс картах, например). Сначала широта")
     return 1
 
 
-def add_loc(update, context):
-    loc = update.message.text
-    print('sdffasafd')
-    context.user_data['location'] = loc
-    db_sess.query(User).filter_by(id=update.message.from_user['id']).update(
-        {'location': loc}
-    )
-    db_sess.commit()
-    db_sess.rollback()
-    return ConversationHandler.END
+def add_lat(update, context):
+    lat = update.message.text
+    if is_float(lat):
+        context.user_data['lat'] = int(lat)
+        update.message.reply_text('Хорошо, а теперь долготу')
+        return 2
+
+    else:
+        update.message.reply_text('Похоже, что ты написал не широту')
+
+def add_lon(update, context):
+    lon = update.message.text
+    if is_float(lon):
+        context.user_data['lon'] = lon
+        db_sess.query(User).filter_by(id=update.message.from_user['id']).update(
+            {'lat': context.user_data['lat'],
+             'lon': lon
+             }
+        )
+        db_sess.commit()
+        db_sess.rollback()
+        return ConversationHandler.END
+
+    else:
+        update.message.reply_text('Похоже, что ты ввёл не долготу')
 
 def stop_loc(update, context):
     murkup = user_keyboard(context)
@@ -164,8 +185,6 @@ def stop_age(update, context):
 
 ############################################# Add new spot ############################################################
 
-def send_photo_file_id(chat_id, file_id):
-    requests.get(f'{URL}{TOKEN}/sendPhoto?chat_id={chat_id}&photo={file_id}')
 
 
 def start_add_spot(update, context):
@@ -183,20 +202,39 @@ def spot_name(update, context):
 
     else:
         context.user_data['spot_name'] = spot_mess
-        update.message.reply_text('Теперь его координаты в формате: 39.2423, 71.23212')
+        update.message.reply_text('Теперь его координаты в виде широты и долготы,'
+                                  ' взять их можно всё в тех же яндекс картах. Отправь сначала широту')
         return 2
 
 
-def spot_cords(update, context):
-    cords = update.message.text
-    db = db_sess.query(Spot).filter(Spot.coords == cords)
-    if db_sess.query(db.exists()).scalar():
-        update.message.reply_text('Похоже, что такой спот уже существует!')
+def spot_lat(update, context):
+    lat = update.message.text
+    if not is_float(lat):
+        update.message.reply_text('Похоже, что ты ввёл не широту')
 
     else:
-        context.user_data['spot_cords'] = cords
-        update.message.reply_text('Теперь надо бы прикрепить фото нового спота, пришли мне её')
+        context.user_data['spot_lat'] = lat
+        update.message.reply_text('Теперь мне нужна его долгота')
         return 3
+
+
+def spot_lon(update, context):
+    lon = update.message.text
+    if is_float(lon):
+        db = db_sess.query(Spot).filter((Spot.lat == float(context.user_data['spot_lat'])) and (Spot.lon == lon))
+        print(db)
+        if db_sess.query(db.exists()).scalar():
+            update.message.reply_text('Похоже, что такой спот уже существует! Попробуй по новой')
+            return ConversationHandler.END
+
+        else:
+            update.message.reply_text('Великолепно, а теперь отправь его фото, для наглядности')
+            context.user_data['spot_lon'] = lon
+            return 4
+
+    else:
+        update.message.reply_text('Похоже, что ты ввёл не долготу')
+
 
 def spot_photo(update, context):
     photo_mess = update.message.photo[-1]
@@ -204,7 +242,8 @@ def spot_photo(update, context):
     spot = Spot()
     spot.photo = photo_mess['file_id']
     spot.name = context.user_data['spot_name']
-    spot.coords = context.user_data['spot_cords']
+    spot.lat = context.user_data['spot_lat']
+    spot.lon = context.user_data['spot_lon']
     spot.user_id = update.message.from_user['id']
     db_sess.add(spot)
     db_sess.commit()
@@ -219,7 +258,6 @@ def spot_stopping(update, context):
     return ConversationHandler.END
 
 
-
 def main():
     updater = Updater('5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw', use_context=True)
     dp = updater.dispatcher
@@ -232,7 +270,8 @@ def main():
 
     location = ConversationHandler(
         entry_points=[CommandHandler('find_loc', start_locating, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, add_loc)]},
+        states={1: [MessageHandler(Filters.text, add_lat)],
+                2: [MessageHandler(Filters.text, add_lon)]},
         fallbacks=[CommandHandler('stop_loc', stop_loc)]
     )
     add_age_scen = ConversationHandler(
@@ -243,8 +282,9 @@ def main():
     new_spot = ConversationHandler(
         entry_points=[CommandHandler('add_spot', start_add_spot, pass_chat_data=True)],
         states={1: [MessageHandler(Filters.text, spot_name, pass_chat_data=True)],
-                2: [MessageHandler(Filters.text, spot_cords)],
-                3: [MessageHandler(Filters.photo, spot_photo)]},
+                2: [MessageHandler(Filters.text, spot_lat)],
+                3: [MessageHandler(Filters.text, spot_lon)],
+                4: [MessageHandler(Filters.photo, spot_photo)]},
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )
 
