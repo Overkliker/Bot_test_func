@@ -25,6 +25,10 @@ TOKEN = '5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw'
 URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
 
+def cups(name):
+    pass
+
+
 def user_keyboard(context):
     '''Кнопки по-умолчанию для админа и пользователя. ВОзвращает ReplyKeyboardMarkup'''
     try:
@@ -43,8 +47,9 @@ def help(update, context):
 ############################################# Autorize ############################################################
 def start_aut(update, context):
     db_sess = db_session.create_session()
+    rep_keyboard = user_keyboard(context)
     update.message.reply_text(
-        "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся введи мне своё имя")
+        "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся введи мне своё имя", reply_markup=rep_keyboard)
     return 1
 
 
@@ -81,13 +86,15 @@ def f_res(update, context):
         yes_rename(update, context)
         return ConversationHandler.END
 
+
 # Rename user in DB
 def rename(update, context):
-    if update.message.text.lower() == 'нет':
+    if update.message.text.lower() == 'да':
         user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
         context.user_data['name'] = user.name
     yes_rename(update, context)
     return ConversationHandler.END
+
 
 def yes_rename(update, context):
     markup = user_keyboard(context)
@@ -131,6 +138,7 @@ def add_db_age(update, context):
             db_sess.add(user)
             db_sess.commit()
             db_sess.rollback()
+
             return ConversationHandler.END
 
     else:
@@ -140,8 +148,10 @@ def add_db_age(update, context):
 #Stop dialog
 def stop(update, context):
     murkup = user_keyboard(context)
+    print('stop')
     update.message.reply_text('reg stop', reply_markup=murkup)
     return ConversationHandler.END
+
 
 ############################################# Add location ############################################################
 
