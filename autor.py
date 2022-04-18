@@ -66,86 +66,46 @@ def f_res(update, context):
             return 2
 
         except:
-            user_id = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
+            user_id = db_sess.query(User).filter(User.id == update.message.from_user['id'])
             print(user_id)
             if user_id:
-                user = User()
-                user.name = name
-                user.id = update.message.from_user['id']
-                db_sess.add(user)
-                db_sess.commit()
-                db_sess.rollback()
+                context.user_data['user_id'] = update.message.from_user['id']
+                update.message.reply_text(
+                    "Осталось немного, напиши нам свой возраст, можно и без него, но тогда некоторые функции не будут доступны тебе:",
+                )
+                return 3
+
 
             else:
                 update.message.reply_text('Вы уже существуете в бд')
-
+        yes_rename(update, context)
         return ConversationHandler.END
 
-
+# Rename user in DB
 def rename(update, context):
     if update.message.text.lower() == 'нет':
-
-
-def stop(update, context):
-    murkup = user_keyboard(context)
-    update.message.reply_text('reg stop', reply_markup=murkup)
+        user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
+        context.user_data['name'] = user.name
+    yes_rename(update, context)
     return ConversationHandler.END
 
-############################################# Add location ############################################################
-
-def start_locating(update, context):
-    db_sess = db_session.create_session()
+def yes_rename(update, context):
+    markup = user_keyboard(context)
     update.message.reply_text(
-        "Отлично, давай определим твоё мостоположение. Напиши мне свою широту и долготу"
-        " (можешь найти в яндекс картах, например). Сначала широта")
-    return 1
-
-
-def add_lat(update, context):
-    lat = update.message.text
-    if is_float(lat):
-        context.user_data['lat'] = int(lat)
-        update.message.reply_text('Хорошо, а теперь долготу')
-        return 2
-
-    else:
-        update.message.reply_text('Похоже, что ты написал не широту')
-
-def add_lon(update, context):
-    lon = update.message.text
-    if is_float(lon):
-        context.user_data['lon'] = lon
-        db_sess.query(User).filter_by(id=update.message.from_user['id']).update(
-            {'lat': context.user_data['lat'],
-             'lon': lon
-             }
+        f"{context.user_data['name'].capitalize()}, добро пожаловать!", reply_markup=markup)
+    try:
+        db_sess.query(User).filter(User.id == update.message.from_user['id']).update(
+            {User.name: context.user_data['name']}, synchronize_session=False
         )
         db_sess.commit()
+
+    except:
         db_sess.rollback()
-        return ConversationHandler.END
-
-    else:
-        update.message.reply_text('Похоже, что ты ввёл не долготу')
-
-def stop_loc(update, context):
-    murkup = user_keyboard(context)
-    update.message.reply_text('Loc stop', reply_markup=murkup)
-    return ConversationHandler.END
+        print('error')
 
 
-############################################# Add age ############################################################
-
-
-def start_age(update, context):
-    db_sess = db_session.create_session()
-    murkup = [['/stop_age']]
-    update.message.reply_text(
-        "Осталось немного, напиши нам свой возраст, можно и без него, но тогда некоторые функции не будут доступны тебе:",
-)
-    return 1
-
-
-def add_age(update, context):
+# Add age in DB
+def add_db_age(update, context):
     age = update.message.text
     context.user_data['age'] = age
     if age.isdigit():
@@ -164,9 +124,11 @@ def add_age(update, context):
                 return ConversationHandler.END
 
         else:
-            db_sess.query(User).filter_by(id=update.message.from_user['id']).update(
-                {'age': age}
-            )
+            user = User()
+            user.id = context.user_data['user_id']
+            user.name = context.user_data['name']
+            user.age = age
+            db_sess.add(user)
             db_sess.commit()
             db_sess.rollback()
             return ConversationHandler.END
@@ -175,16 +137,55 @@ def add_age(update, context):
         update.message.reply_text('Упс... Что-то пошло не так! Попробуй снова')
 
 
-def stop_age(update, context):
+#Stop dialog
+def stop(update, context):
     murkup = user_keyboard(context)
-    update.message.reply_text('Ну как хочешь! Значит будешь демо ботом пользоваться', reply_markup=murkup)
+    update.message.reply_text('reg stop', reply_markup=murkup)
+    return ConversationHandler.END
+
+############################################# Add location ############################################################
+
+def start_locating(update, context):
+    db_sess = db_session.create_session()
+    update.message.reply_text(
+        "Отлично, давай определим твоё мостоположение. Напиши мне свою широту и долготу"
+        " (можешь найти в яндекс картах, например). Сначала широта")
+    return 1
+
+
+def add_lat(update, context):
+    lat = update.message.text
+    if is_float(lat):
+        context.user_data['lat'] = float(lat)
+        update.message.reply_text('Хорошо, а теперь долготу')
+        return 2
+
+    else:
+        update.message.reply_text('Похоже, что ты написал не широту')
+
+def add_lon(update, context):
+    lon = update.message.text
+    if is_float(lon):
+        context.user_data['lon'] = float(lon)
+        db_sess.query(User).filter(User.id == update.message.from_user['id']).update(
+            {User.lat: context.user_data['lat'],
+             User.lon: context.user_data['lon']
+             }
+        )
+        db_sess.commit()
+        db_sess.rollback()
+        return ConversationHandler.END
+
+    else:
+        update.message.reply_text('Похоже, что ты ввёл не долготу')
+
+def stop_loc(update, context):
+    murkup = user_keyboard(context)
+    update.message.reply_text('Loc stop', reply_markup=murkup)
     return ConversationHandler.END
 
 
-
-
 ############################################# Add new spot ############################################################
-
 
 
 def start_add_spot(update, context):
@@ -264,7 +265,9 @@ def main():
 
     start_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_aut, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, f_res)]},
+        states={1: [MessageHandler(Filters.text, f_res)],
+                2: [MessageHandler(Filters.text, yes_rename)],
+                3: [MessageHandler(Filters.text, add_db_age)]},
         fallbacks=[CommandHandler('stop', stop)]
     )
 
@@ -274,11 +277,7 @@ def main():
                 2: [MessageHandler(Filters.text, add_lon)]},
         fallbacks=[CommandHandler('stop_loc', stop_loc)]
     )
-    add_age_scen = ConversationHandler(
-        entry_points=[CommandHandler('add_age', start_age, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, add_age)]},
-        fallbacks=[CommandHandler('stop_age', stop_age)]
-    )
+
     new_spot = ConversationHandler(
         entry_points=[CommandHandler('add_spot', start_add_spot, pass_chat_data=True)],
         states={1: [MessageHandler(Filters.text, spot_name, pass_chat_data=True)],
@@ -291,7 +290,6 @@ def main():
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
     dp.add_handler(location)
-    dp.add_handler(add_age_scen)
     dp.add_handler(new_spot)
     updater.start_polling()
 
