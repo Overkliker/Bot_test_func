@@ -1,30 +1,26 @@
-from data import db_session
-from data.spots import Spot
-from data.user import User
-from help_defs import compute_delta, around
+import requests
+
+geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
 
 
-db_session.global_init("data/tg_bot.db")
-session = db_session.create_session()
-spots = session.query(User.lat, User.lon).filter(User.id == 785760784).one()
-print(type(spots[0]))
-print(type(3.3))
-lat = compute_delta(spots[0])
-lon = compute_delta(spots[1])
-print(lat, lon)
+def search_adress(address):
+    user_request = address
+    geocoder_params = {
+        "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+        "geocode": user_request,
+        "format": "json"}
+    response = requests.get(geocoder_api_server, params=geocoder_params)
+    if not response:
+        raise ConnectionError  # вывести ошибку пдключения
+    json_response = response.json()
+    try:
+        toponym = json_response["response"]["GeoObjectCollection"][
+            "featureMember"][0]["GeoObject"]
+        toponym_coodrinates = toponym["Point"]["pos"]
+        toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
+        return toponym_longitude, toponym_lattitude
+    except IndexError:
+        raise FileNotFoundError  # вывести ошибку ненахождения объекта
 
-around_lat = around(lat)
-around_lon = around(lon)
-print(around_lat, around_lon)
 
-bet_lat1 = spots[0] - around_lat
-print(bet_lat1)
-bet_lat2 = spots[0] + around_lat
-
-bet_lon1 = spots[1] - around_lon
-print(bet_lat1)
-bet_lon2 = spots[1] + around_lon
-
-good_cords = session.query(Spot).filter(Spot.lat.between(bet_lat1, bet_lat2), Spot.lon.between(bet_lon1, bet_lon2)).all()
-#
-print(good_cords)
+print(search_adress('askldjksd'))

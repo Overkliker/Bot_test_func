@@ -1,5 +1,5 @@
 import logging
-from help_defs import is_float
+from help_defs import is_float, search_adress
 
 import requests
 import telegram
@@ -138,7 +138,7 @@ def add_db_age(update, context):
             db_sess.add(user)
             db_sess.commit()
             db_sess.rollback()
-
+            update.message.reply_text('Мы добавили тебя в нашу Базу :)')
             return ConversationHandler.END
 
     else:
@@ -157,37 +157,33 @@ def stop(update, context):
 
 def start_locating(update, context):
     db_sess = db_session.create_session()
+    markup = ReplyKeyboardMarkup([['/stop_loc']], one_time_keyboard=False)
     update.message.reply_text(
-        "Отлично, давай определим твоё мостоположение. Напиши мне свою широту и долготу"
-        " (можешь найти в яндекс картах, например). Сначала широта")
+        "Отлично, давай определим твоё мостоположение. Напиши мне свой адресс"
+        " (можешь найти в яндекс картах, например)", reply_markup=markup)
     return 1
 
 
-def add_lat(update, context):
-    lat = update.message.text
-    if is_float(lat):
-        context.user_data['lat'] = float(lat)
-        update.message.reply_text('Хорошо, а теперь долготу')
-        return 2
-
-    else:
-        update.message.reply_text('Похоже, что ты написал не широту')
-
-def add_lon(update, context):
-    lon = update.message.text
-    if is_float(lon):
-        context.user_data['lon'] = float(lon)
+def add_adress(update, context):
+    adress = update.message.text
+    print(adress)
+    try:
+        search = search_adress(adress)
+        lat = search[0]
+        lon = search[1]
         db_sess.query(User).filter(User.id == update.message.from_user['id']).update(
-            {User.lat: context.user_data['lat'],
-             User.lon: context.user_data['lon']
+            {User.lat: float(lat),
+             User.lon: float(lon)
              }
         )
         db_sess.commit()
         db_sess.rollback()
+        update.message.reply_text('Мы обновили твои координаты')
         return ConversationHandler.END
 
-    else:
-        update.message.reply_text('Похоже, что ты ввёл не долготу')
+    except FileNotFoundError:
+        update.message.reply_text('Похоже, что ты ввёл не коректный адресс')
+
 
 def stop_loc(update, context):
     murkup = user_keyboard(context)
@@ -200,8 +196,8 @@ def stop_loc(update, context):
 
 def start_add_spot(update, context):
     db_sess = db_session.create_session()
-    murkup = [['/stop_spot']]
-    update.message.reply_text('Давай же добавим новый спот. Введи его название:')
+    markup = ReplyKeyboardMarkup([['/stop_spot']], one_time_keyboard=True)
+    update.message.reply_text('Давай же добавим новый спот. Введи его название', reply_markup=markup)
     return 1
 
 
@@ -264,10 +260,15 @@ def spot_photo(update, context):
 
 
 def spot_stopping(update, context):
+    print('saddsf')
     murkup = user_keyboard(context)
     update.message.reply_text('Раз на то ваша воля...', reply_markup=murkup)
     return ConversationHandler.END
 
+######################### Filter out commands #####################
+
+def hren_echo(update, context):
+    update.message.reply_text('Ты лучше команду введи')
 
 def main():
     updater = Updater('5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw', use_context=True)
@@ -275,31 +276,32 @@ def main():
 
     start_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_aut, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, f_res)],
-                2: [MessageHandler(Filters.text, yes_rename)],
-                3: [MessageHandler(Filters.text, add_db_age)]},
+        states={1: [MessageHandler(~ Filters.text, f_res)],
+                2: [MessageHandler(~ Filters.text, yes_rename)],
+                3: [MessageHandler(~ Filters.text, add_db_age)]},
         fallbacks=[CommandHandler('stop', stop)]
     )
 
     location = ConversationHandler(
         entry_points=[CommandHandler('find_loc', start_locating, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, add_lat)],
-                2: [MessageHandler(Filters.text, add_lon)]},
+        states={1: [MessageHandler(~ Filters.text, add_adress)]},
         fallbacks=[CommandHandler('stop_loc', stop_loc)]
     )
 
     new_spot = ConversationHandler(
         entry_points=[CommandHandler('add_spot', start_add_spot, pass_chat_data=True)],
-        states={1: [MessageHandler(Filters.text, spot_name, pass_chat_data=True)],
-                2: [MessageHandler(Filters.text, spot_lat)],
-                3: [MessageHandler(Filters.text, spot_lon)],
-                4: [MessageHandler(Filters.photo, spot_photo)]},
+        states={1: [MessageHandler(~ Filters.text, spot_name)],
+                2: [MessageHandler(~ Filters.text, spot_lat)],
+                3: [MessageHandler(~ Filters.text, spot_lon)],
+                4: [MessageHandler(~ Filters.photo, spot_photo)]},
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )
 
+    hren_taker = MessageHandler(Filters.text, hren_echo)
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
     dp.add_handler(location)
+    dp.add_handler(hren_taker)
     dp.add_handler(new_spot)
     updater.start_polling()
 
