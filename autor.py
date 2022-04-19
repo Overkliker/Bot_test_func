@@ -25,9 +25,13 @@ TOKEN = '5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw'
 URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
 
-def cups(name):
-    pass
+def cups(name, one_time=False):
+    list_with_cups = []
+    for i in name:
+        list_with_cups.append([i])
 
+    markup = ReplyKeyboardMarkup(list_with_cups, one_time_keyboard=one_time)
+    return markup
 
 def user_keyboard(context):
     '''Кнопки по-умолчанию для админа и пользователя. ВОзвращает ReplyKeyboardMarkup'''
@@ -65,9 +69,9 @@ def f_res(update, context):
         context.user_data['reply_keyboard'] = [['/Регистрация', '/Споты'], ['/Мои споты']]
         try:
             user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
-            markup = ReplyKeyboardMarkup([['Да', 'Нет']], one_time_keyboard=True)
+            markup = cups(['Да', "Нет"], one_time=True)
             update.message.reply_text(
-                f'Пользователь с вашим токеном уже зарегистрирован под именем: {user.name}\n Хотите изменить имя?')
+                f'Пользователь с вашим токеном уже зарегистрирован под именем: {user.name}\n Хотите изменить имя?', reply_markup=markup)
             return 2
 
         except:
@@ -76,10 +80,10 @@ def f_res(update, context):
             if user_id:
                 context.user_data['user_id'] = update.message.from_user['id']
                 update.message.reply_text(
-                    "Осталось немного, напиши нам свой возраст, можно и без него, но тогда некоторые функции не будут доступны тебе:",
+                    "Осталось немного, напиши нам свой возраст, можно и без него,"
+                    " но тогда некоторые функции не будут доступны тебе",
                 )
                 return 3
-
 
             else:
                 update.message.reply_text('Вы уже существуете в бд')
@@ -156,8 +160,7 @@ def stop(update, context):
 ############################################# Add location ############################################################
 
 def start_locating(update, context):
-    db_sess = db_session.create_session()
-    markup = ReplyKeyboardMarkup([['/stop_loc']], one_time_keyboard=False)
+    markup = cups(['/stop_loc'])
     update.message.reply_text(
         "Отлично, давай определим твоё мостоположение. Напиши мне свой адресс"
         " (можешь найти в яндекс картах, например)", reply_markup=markup)
@@ -196,7 +199,7 @@ def stop_loc(update, context):
 
 def start_add_spot(update, context):
     db_sess = db_session.create_session()
-    markup = ReplyKeyboardMarkup([['/stop_spot']], one_time_keyboard=True)
+    markup = cups(['/stop_spot'])
     update.message.reply_text('Давай же добавим новый спот. Введи его название', reply_markup=markup)
     return 1
 
@@ -261,14 +264,29 @@ def spot_photo(update, context):
 
 def spot_stopping(update, context):
     print('saddsf')
-    murkup = user_keyboard(context)
+
+    murkup = cups(['/find_loc', '/add_spot', ''])
     update.message.reply_text('Раз на то ваша воля...', reply_markup=murkup)
     return ConversationHandler.END
 
-######################### Filter out commands #####################
+######################### Get user cords #####################
 
-def hren_echo(update, context):
-    update.message.reply_text('Ты лучше команду введи')
+def user_cords(update, context):
+    cords = requests.get('Здесь будет сделан запрос в базу данных через rest-api').json()
+    update.message.reply_text(f'Вот ваши координаты: {cords}')
+
+
+###################### Get nearest spots #####################
+
+def nearest_spots(update, context):
+    spots = requests.get('Здесь будет сделан запрос в базу данных через rest-api').json()
+    l_spots = []
+    for i in spots:
+        l_spots.append(i['name'])
+
+    for i in l_spots:
+        bot.send_photo(chat_id=update.message.chat_id, photo=l_spots[0], caption=spots[1])
+
 
 def main():
     updater = Updater('5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw', use_context=True)
@@ -297,12 +315,15 @@ def main():
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )
 
-    hren_taker = MessageHandler(Filters.text, hren_echo)
+    get_cords = CommandHandler('my_cords', user_cords)
+    get_list_spots = CommandHandler('nearest_spots', nearest_spots)
+
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
     dp.add_handler(location)
-    dp.add_handler(hren_taker)
     dp.add_handler(new_spot)
+    dp.add_handler(get_list_spots)
+    dp.add_handler(get_cords)
     updater.start_polling()
 
 
