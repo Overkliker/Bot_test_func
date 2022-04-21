@@ -24,6 +24,9 @@ db_sess = db_session.create_session()
 TOKEN = '5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw'
 URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
+STANDART_KEYBOARD_1 = ['/start', '/find_loc', '/add_spots', '/my_cords', '/help']
+KEY_BOARD_COUNTER = 0
+CONST_AGE = 0
 
 def cups(name, one_time=False):
     list_with_cups = []
@@ -31,15 +34,6 @@ def cups(name, one_time=False):
         list_with_cups.append([i])
 
     markup = ReplyKeyboardMarkup(list_with_cups, one_time_keyboard=one_time)
-    return markup
-
-def user_keyboard(context):
-    '''Кнопки по-умолчанию для админа и пользователя. ВОзвращает ReplyKeyboardMarkup'''
-    try:
-        markup = ReplyKeyboardMarkup(context.user_data['reply_keyboard'], one_time_keyboard=False)
-    except:
-        context.user_data['reply_keyboard'] = [['/start', '/stop'], ['Мероприятия']]
-        markup = ReplyKeyboardMarkup(context.user_data['reply_keyboard'], one_time_keyboard=False)
     return markup
 
 
@@ -51,7 +45,7 @@ def help(update, context):
 ############################################# Autorize ############################################################
 def start_aut(update, context):
     db_sess = db_session.create_session()
-    rep_keyboard = user_keyboard(context)
+    rep_keyboard = cups(['/stop'])
     update.message.reply_text(
         "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся введи мне своё имя", reply_markup=rep_keyboard)
     return 1
@@ -59,6 +53,7 @@ def start_aut(update, context):
 
 def f_res(update, context):
     name = update.message.text
+    print(name)
     context.user_data['name'] = name
     if name.lower == 'admin':
         update.message.reply_text('Чтобы отправить сообщение всем участникам чата, наберите /start ваше сообщение')
@@ -66,12 +61,13 @@ def f_res(update, context):
                                                ['/events прошедшие', '/events будущие']]
 
     else:
-        context.user_data['reply_keyboard'] = [['/Регистрация', '/Споты'], ['/Мои споты']]
         try:
             user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
-            markup = cups(['Да', "Нет"], one_time=True)
+            print('adasd')
+            markup = cups(['Да', "Нет", "/stop"], one_time=True)
             update.message.reply_text(
-                f'Пользователь с вашим токеном уже зарегистрирован под именем: {user.name}\n Хотите изменить имя?', reply_markup=markup)
+                f'Пользователь с вашим токеном уже зарегистрирован под именем: {user.name}\n Хотите изменить имя?',
+                reply_markup=markup)
             return 2
 
         except:
@@ -93,7 +89,7 @@ def f_res(update, context):
 
 # Rename user in DB
 def rename(update, context):
-    if update.message.text.lower() == 'да':
+    if update.message.text.lower() == 'нет':
         user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
         context.user_data['name'] = user.name
     yes_rename(update, context)
@@ -101,7 +97,11 @@ def rename(update, context):
 
 
 def yes_rename(update, context):
-    markup = user_keyboard(context)
+    KEY_BOARD_COUNTER = 1
+    if KEY_BOARD_COUNTER == 1:
+        markup = cups(STANDART_KEYBOARD_1)
+    else:
+        markup = cups(STANDART_KEYBOARD_1)
     update.message.reply_text(
         f"{context.user_data['name'].capitalize()}, добро пожаловать!", reply_markup=markup)
     try:
@@ -114,6 +114,7 @@ def yes_rename(update, context):
         db_sess.rollback()
         print('error')
 
+    return ConversationHandler.END
 
 # Add age in DB
 def add_db_age(update, context):
@@ -151,9 +152,12 @@ def add_db_age(update, context):
 
 #Stop dialog
 def stop(update, context):
-    murkup = user_keyboard(context)
+    if KEY_BOARD_COUNTER == 1:
+        murkup = cups(STANDART_KEYBOARD_1)
+    else:
+        murkup = cups(STANDART_KEYBOARD_1)
     print('stop')
-    update.message.reply_text('reg stop', reply_markup=murkup)
+    update.message.reply_text('Остановка системы входа!', reply_markup=murkup)
     return ConversationHandler.END
 
 
@@ -189,8 +193,11 @@ def add_adress(update, context):
 
 
 def stop_loc(update, context):
-    murkup = user_keyboard(context)
-    update.message.reply_text('Loc stop', reply_markup=murkup)
+    if KEY_BOARD_COUNTER == 1:
+        murkup = cups(STANDART_KEYBOARD_1)
+    else:
+        murkup = cups(STANDART_KEYBOARD_1)
+    update.message.reply_text('Остановка всех систем по приказу главнокомандуещего!', reply_markup=murkup)
     return ConversationHandler.END
 
 
@@ -199,6 +206,7 @@ def stop_loc(update, context):
 
 def start_add_spot(update, context):
     db_sess = db_session.create_session()
+    age = db_sess
     markup = cups(['/stop_spot'])
     update.message.reply_text('Давай же добавим новый спот. Введи его название', reply_markup=markup)
     return 1
@@ -259,6 +267,7 @@ def spot_photo(update, context):
     db_sess.commit()
     db_sess.rollback()
     print('отработал')
+    update.message.reply_text('Мы добавили новый спот в свою коллекцию!')
     return ConversationHandler.END
 
 
@@ -272,8 +281,12 @@ def spot_stopping(update, context):
 ######################### Get user cords #####################
 
 def user_cords(update, context):
-    cords = requests.get('Здесь будет сделан запрос в базу данных через rest-api').json()
-    update.message.reply_text(f'Вот ваши координаты: {cords}')
+    us_id = update.message.from_user['id']
+    cords = requests.get(f'http://127.0.0.1:5000/users/select/{us_id}/cords').json()
+    print(cords)
+    lat = cords['user'][0]['lat']
+    lon = cords['user'][0]['lon']
+    update.message.reply_text(f'Вот ваши координаты: {lat, lon}')
 
 
 ###################### Get nearest spots #####################
@@ -294,23 +307,23 @@ def main():
 
     start_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_aut, pass_chat_data=True)],
-        states={1: [MessageHandler(~ Filters.text, f_res)],
-                2: [MessageHandler(~ Filters.text, yes_rename)],
-                3: [MessageHandler(~ Filters.text, add_db_age)]},
+        states={1: [MessageHandler(~ Filters.command, f_res)],
+                2: [MessageHandler(~ Filters.command, yes_rename)],
+                3: [MessageHandler(~ Filters.command, add_db_age)]},
         fallbacks=[CommandHandler('stop', stop)]
     )
 
     location = ConversationHandler(
         entry_points=[CommandHandler('find_loc', start_locating, pass_chat_data=True)],
-        states={1: [MessageHandler(~ Filters.text, add_adress)]},
+        states={1: [MessageHandler(~ Filters.command, add_adress)]},
         fallbacks=[CommandHandler('stop_loc', stop_loc)]
     )
 
     new_spot = ConversationHandler(
         entry_points=[CommandHandler('add_spot', start_add_spot, pass_chat_data=True)],
-        states={1: [MessageHandler(~ Filters.text, spot_name)],
-                2: [MessageHandler(~ Filters.text, spot_lat)],
-                3: [MessageHandler(~ Filters.text, spot_lon)],
+        states={1: [MessageHandler(~ Filters.command, spot_name)],
+                2: [MessageHandler(~ Filters.command, spot_lat)],
+                3: [MessageHandler(~ Filters.command, spot_lon)],
                 4: [MessageHandler(~ Filters.photo, spot_photo)]},
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )

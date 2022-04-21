@@ -28,3 +28,16 @@ def return_spots(user_id):
 
     good_cords = session.query(Spot).filter((Spot.lat.between(bet_lat1, bet_lat2)) and
                                             (Spot.lon.between(bet_lon1, bet_lon2)))
+
+
+@spots_blueprint.route('/users/select/<id_>/cords')
+def select_one_user_cords_(id_):
+    db_sess = db_session.create_session()
+    user = db_sess.query(User).filter(User.id == id_)
+    return jsonify(
+        {
+            'user':
+                [item.to_dict(only=('lat', 'lon'))
+                 for item in user]
+        }
+    )
