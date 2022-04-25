@@ -13,8 +13,12 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     Filters,
-    ConversationHandler,
+    ConversationHandler, CallbackContext,
 )
+
+import asyncio
+import datetime
+
 
 
 
@@ -24,9 +28,16 @@ db_sess = db_session.create_session()
 TOKEN = '5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw'
 URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
-STANDART_KEYBOARD_1 = ['/start', '/find_loc', '/add_spots', '/my_cords', '/help']
-KEY_BOARD_COUNTER = 0
-CONST_AGE = 0
+
+START_KEYBOARD = ['/start']
+STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/timer', '/help']
+KB_TIMER = [["/set_timer 30", "/set_timer 60", "/set_timer 300"],
+                  ["/back"]]
+
+CLOSE_TIMER = [["/close"]]
+
+REG_COUNTER = 0
+
 
 def cups(name, one_time=False):
     list_with_cups = []
@@ -39,13 +50,20 @@ def cups(name, one_time=False):
 
 def help(update, context):
     '''Обработка /help'''
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+    else:
+        markup = cups(STANDART_KEYBOARD_1)
     update.message.reply_text(
-        "Воспользуйся кнопками. Если что-то пошло не так, начни сначала /start")
+        "Воспользуйся кнопками. Если ещё не авторизовался то прожми /start", reply_markup=markup)
+
 
 ############################################# Autorize ############################################################
 def start_aut(update, context):
-    db_sess = db_session.create_session()
-    rep_keyboard = cups(['/stop'])
+    if REG_COUNTER == 1:
+        update.message.reply_text('Зачем тебе сюда? Ты же уже авторизован')
+        return ConversationHandler.END
+    rep_keyboard = cups(['/stop'], one_time=True)
     update.message.reply_text(
         "Привет! Я бот, который расскажет тебе о спотах поблизости. Давай зарегистрируемся введи мне своё имя", reply_markup=rep_keyboard)
     return 1
@@ -53,18 +71,15 @@ def start_aut(update, context):
 
 def f_res(update, context):
     name = update.message.text
-    print(name)
     context.user_data['name'] = name
     if name.lower == 'admin':
-        update.message.reply_text('Чтобы отправить сообщение всем участникам чата, наберите /start ваше сообщение')
-        context.user_data['reply_keyboard'] = [['Разместить информацию', 'Мероприятия'],
-                                               ['/events прошедшие', '/events будущие']]
+        pass
 
     else:
         try:
             user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
             print('adasd')
-            markup = cups(['Да', "Нет", "/stop"], one_time=True)
+            markup = cups(['Да', "Нет"], one_time=True)
             update.message.reply_text(
                 f'Пользователь с вашим токеном уже зарегистрирован под именем: {user.name}\n Хотите изменить имя?',
                 reply_markup=markup)
@@ -89,19 +104,22 @@ def f_res(update, context):
 
 # Rename user in DB
 def rename(update, context):
+    global REG_COUNTER
     if update.message.text.lower() == 'нет':
         user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
         context.user_data['name'] = user.name
+        REG_COUNTER = 1
+        markup = cups(STANDART_KEYBOARD_1)
+        update.message.reply_text('Ой! А я вас помню!', reply_markup=markup)
+        return ConversationHandler.END
+    print('kjy')
     yes_rename(update, context)
-    return ConversationHandler.END
 
 
 def yes_rename(update, context):
-    KEY_BOARD_COUNTER = 1
-    if KEY_BOARD_COUNTER == 1:
-        markup = cups(STANDART_KEYBOARD_1)
-    else:
-        markup = cups(STANDART_KEYBOARD_1)
+    global REG_COUNTER
+    REG_COUNTER = 1
+    markup = cups(STANDART_KEYBOARD_1)
     update.message.reply_text(
         f"{context.user_data['name'].capitalize()}, добро пожаловать!", reply_markup=markup)
     try:
@@ -109,6 +127,7 @@ def yes_rename(update, context):
             {User.name: context.user_data['name']}, synchronize_session=False
         )
         db_sess.commit()
+        print(REG_COUNTER)
 
     except:
         db_sess.rollback()
@@ -116,23 +135,26 @@ def yes_rename(update, context):
 
     return ConversationHandler.END
 
+
 # Add age in DB
 def add_db_age(update, context):
+    global REG_COUNTER
     age = update.message.text
     context.user_data['age'] = age
     if age.isdigit():
         if int(age) < 13:
+            markup = cups(START_KEYBOARD)
             ost = 13 - int(age)
             if ost > 4:
-                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} лет')
+                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} лет', reply_markup=markup)
                 return ConversationHandler.END
 
             elif 1 < ost <= 4:
-                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} года')
+                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} года', reply_markup=markup)
                 return ConversationHandler.END
 
             else:
-                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} год')
+                update.message.reply_text(f'Извиняй друг, но ты ещё маловат. Приходи через {ost} год',  reply_markup=markup)
                 return ConversationHandler.END
 
         else:
@@ -143,7 +165,9 @@ def add_db_age(update, context):
             db_sess.add(user)
             db_sess.commit()
             db_sess.rollback()
-            update.message.reply_text('Мы добавили тебя в нашу Базу :)')
+            REG_COUNTER = 1
+            markup = cups(STANDART_KEYBOARD_1)
+            update.message.reply_text('Мы добавили тебя в нашу Базу :)', markup=markup)
             return ConversationHandler.END
 
     else:
@@ -152,19 +176,24 @@ def add_db_age(update, context):
 
 #Stop dialog
 def stop(update, context):
-    if KEY_BOARD_COUNTER == 1:
+    if REG_COUNTER == 1:
         murkup = cups(STANDART_KEYBOARD_1)
     else:
-        murkup = cups(STANDART_KEYBOARD_1)
+        murkup = cups(START_KEYBOARD)
     print('stop')
     update.message.reply_text('Остановка системы входа!', reply_markup=murkup)
     return ConversationHandler.END
 
 
 ############################################# Add location ############################################################
-
 def start_locating(update, context):
-    markup = cups(['/stop_loc'])
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('ТЫ КАК ВООБЩЕ СЮДА ПОПАЛ?! Сходи и зарегистрируйся'
+                                  ' сначала, для этого нажми на кнопку /start', reply_markup=markup)
+        return ConversationHandler.END
+    markup = cups(['/stop_loc'], one_time=True)
+    print('hui1')
     update.message.reply_text(
         "Отлично, давай определим твоё мостоположение. Напиши мне свой адресс"
         " (можешь найти в яндекс картах, например)", reply_markup=markup)
@@ -184,8 +213,9 @@ def add_adress(update, context):
              }
         )
         db_sess.commit()
+        markup = cups(STANDART_KEYBOARD_1)
         db_sess.rollback()
-        update.message.reply_text('Мы обновили твои координаты')
+        update.message.reply_text('Мы обновили твои координаты', reply_markup=markup)
         return ConversationHandler.END
 
     except FileNotFoundError:
@@ -193,10 +223,7 @@ def add_adress(update, context):
 
 
 def stop_loc(update, context):
-    if KEY_BOARD_COUNTER == 1:
-        murkup = cups(STANDART_KEYBOARD_1)
-    else:
-        murkup = cups(STANDART_KEYBOARD_1)
+    murkup = cups(STANDART_KEYBOARD_1)
     update.message.reply_text('Остановка всех систем по приказу главнокомандуещего!', reply_markup=murkup)
     return ConversationHandler.END
 
@@ -205,11 +232,24 @@ def stop_loc(update, context):
 
 
 def start_add_spot(update, context):
+    print('her1')
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('ТЫ КАК ВООБЩЕ СЮДА ПОПАЛ?! Сходи и зарегистрируйся'
+                                  ' сначала, для этого нажми на кнопку /start', reply_markup=markup)
+        return ConversationHandler.END
+
+    print('her2')
     db_sess = db_session.create_session()
-    age = db_sess
-    markup = cups(['/stop_spot'])
-    update.message.reply_text('Давай же добавим новый спот. Введи его название', reply_markup=markup)
-    return 1
+    data_user = db_sess.query(User).filter(User.id == update.message.from_user['id'])
+    if data_user:
+        markup = cups(['/stop_spot'], one_time=True)
+        update.message.reply_text('Давай же добавим новый спот. Введи его название', reply_markup=markup)
+        return 1
+
+    else:
+        update.message.reply_text("Похоже, что ты ещё не зарегистрирован у нас.")
+        return ConversationHandler.END
 
 
 def spot_name(update, context):
@@ -220,38 +260,32 @@ def spot_name(update, context):
 
     else:
         context.user_data['spot_name'] = spot_mess
-        update.message.reply_text('Теперь его координаты в виде широты и долготы,'
-                                  ' взять их можно всё в тех же яндекс картах. Отправь сначала широту')
+        update.message.reply_text('Теперь его его адрес,'
+                                  ' взять его можно всё в тех же яндекс картах')
         return 2
 
 
-def spot_lat(update, context):
-    lat = update.message.text
-    if not is_float(lat):
-        update.message.reply_text('Похоже, что ты ввёл не широту')
+def spot_cords(update, context):
+    adress = update.message.text
+    print(adress)
+    try:
+        search = search_adress(adress)
+        lat = search[0]
+        lon = search[1]
 
-    else:
-        context.user_data['spot_lat'] = lat
-        update.message.reply_text('Теперь мне нужна его долгота')
-        return 3
-
-
-def spot_lon(update, context):
-    lon = update.message.text
-    if is_float(lon):
-        db = db_sess.query(Spot).filter((Spot.lat == float(context.user_data['spot_lat'])) and (Spot.lon == lon))
-        print(db)
+        db = db_sess.query(Spot).filter((Spot.lat == float(lat)) and (Spot.lon == lon))
         if db_sess.query(db.exists()).scalar():
             update.message.reply_text('Похоже, что такой спот уже существует! Попробуй по новой')
             return ConversationHandler.END
 
         else:
             update.message.reply_text('Великолепно, а теперь отправь его фото, для наглядности')
+            context.user_data['spot_lat'] = lat
             context.user_data['spot_lon'] = lon
-            return 4
+            return 3
 
-    else:
-        update.message.reply_text('Похоже, что ты ввёл не долготу')
+    except FileNotFoundError:
+        update.message.reply_text('Похоже, что ты ввёл не коректный адресс')
 
 
 def spot_photo(update, context):
@@ -265,32 +299,45 @@ def spot_photo(update, context):
     spot.user_id = update.message.from_user['id']
     db_sess.add(spot)
     db_sess.commit()
-    db_sess.rollback()
+    markup = cups(STANDART_KEYBOARD_1)
     print('отработал')
-    update.message.reply_text('Мы добавили новый спот в свою коллекцию!')
+    update.message.reply_text('Мы добавили новый спот в свою коллекцию!', reply_markup=markup)
     return ConversationHandler.END
 
 
 def spot_stopping(update, context):
     print('saddsf')
-
-    murkup = cups(['/find_loc', '/add_spot', ''])
-    update.message.reply_text('Раз на то ваша воля...', reply_markup=murkup)
+    murkup = cups(STANDART_KEYBOARD_1)
+    update.message.reply_text('Раз на то ваша воля...', markup=murkup)
     return ConversationHandler.END
 
-######################### Get user cords #####################
 
+######################### Get user cords #####################
 def user_cords(update, context):
+    print(REG_COUNTER)
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('ТЫ КАК ВООБЩЕ СЮДА ПОПАЛ?! Сходи и зарегистрируйся'
+                                  ' сначала, для этого нажми на кнопку /start', reply_markup=markup)
+        return ConversationHandler.END
     us_id = update.message.from_user['id']
-    cords = requests.get(f'http://127.0.0.1:5000/users/select/{us_id}/cords').json()
-    print(cords)
-    lat = cords['user'][0]['lat']
-    lon = cords['user'][0]['lon']
-    update.message.reply_text(f'Вот ваши координаты: {lat, lon}')
+    db_sess = db_session.create_session()
+    loc = db_sess.query(User.lat, User.lon).filter(User.id == update.message.from_user['id']).all()
+    print(loc)
+
+    if loc[0][0] != None and loc[0][1] != None:
+        cords = requests.get(f'http://127.0.0.1:5000/users/select/{us_id}/cords').json()
+        # print(cords)
+        lat = cords['user'][0]['lat']
+        lon = cords['user'][0]['lon']
+        update.message.reply_text(f'Вот ваши координаты: {lat, lon}')
+
+    else:
+        update.message.reply_text('Мне кажется, что ты не добавил свои координаты')
+        return ConversationHandler.END
 
 
 ###################### Get nearest spots #####################
-
 def nearest_spots(update, context):
     spots = requests.get('Здесь будет сделан запрос в базу данных через rest-api').json()
     l_spots = []
@@ -301,6 +348,75 @@ def nearest_spots(update, context):
         bot.send_photo(chat_id=update.message.chat_id, photo=l_spots[0], caption=spots[1])
 
 
+########################## Add timer #########################
+def set_timer(update, context):
+    chat_id = update.message.chat_id
+    try:
+        due = int(context.args[0])
+        if due < 0:
+            update.message.reply_text('Извините, не умеем возвращаться в прошлое')
+            return
+
+        job_removed = remove_job_if_exists(str(chat_id), context)
+        context.job_queue.run_once(task, due, context=chat_id, name=str(chat_id))
+
+        text = f"Засек {due} секунд!"
+        context.bot_data.update({"timer": due})
+        if job_removed:
+            text += ' Старая задача удалена.'
+
+        close_timer_markup = cups(CLOSE_TIMER)
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text=str(text),
+                                 reply_markup=close_timer_markup)
+
+    except (IndexError, ValueError):
+        update.message.reply_text('Использование: /set_timer <секунд>')
+
+    except telegram.error.BadRequest:
+        pass
+
+
+def remove_job_if_exists(name, context):
+    current_jobs = context.job_queue.get_jobs_by_name(name)
+    if not current_jobs:
+        return False
+    for job in current_jobs:
+        job.schedule_removal()
+    return True
+
+
+def unset(update, context):
+    chat_id = update.message.chat_id
+    job_removed = remove_job_if_exists(str(chat_id), context)
+    text = 'Таймер отменен!' if job_removed else 'У вас нет активных таймеров'
+    timer_markup = cups(STANDART_KEYBOARD_1)
+    context.bot.send_message(chat_id=update.effective_chat.id,
+                             text=text,
+                             reply_markup=timer_markup)
+
+
+def timer(update: Update, context: CallbackContext):
+    context.bot.send_message(chat_id=update.effective_chat.id,
+                             text="Здесь ты можешь завести таймер")
+
+
+def task(context):
+    timer_markup = cups(KB_TIMER)
+    job = context.job
+    time_duration = context.bot_data["timer"]
+    text = f"{time_duration} сек истекло"
+    context.bot.send_message(job.context, text=text)
+
+
+def back(update: Update, context: CallbackContext):
+    start_markup = cups(STANDART_KEYBOARD_1)
+    context.bot.send_message(chat_id=update.effective_chat.id,
+                             text="Выберите функцию",
+                             reply_markup=start_markup)
+
+
+###################### main func ##################
 def main():
     updater = Updater('5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw', use_context=True)
     dp = updater.dispatcher
@@ -308,7 +424,7 @@ def main():
     start_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start_aut, pass_chat_data=True)],
         states={1: [MessageHandler(~ Filters.command, f_res)],
-                2: [MessageHandler(~ Filters.command, yes_rename)],
+                2: [MessageHandler(~ Filters.command, rename)],
                 3: [MessageHandler(~ Filters.command, add_db_age)]},
         fallbacks=[CommandHandler('stop', stop)]
     )
@@ -318,18 +434,16 @@ def main():
         states={1: [MessageHandler(~ Filters.command, add_adress)]},
         fallbacks=[CommandHandler('stop_loc', stop_loc)]
     )
+    get_cords = CommandHandler('my_cords', user_cords)
+    get_list_spots = CommandHandler('nearest_spots', nearest_spots)
 
     new_spot = ConversationHandler(
         entry_points=[CommandHandler('add_spot', start_add_spot, pass_chat_data=True)],
         states={1: [MessageHandler(~ Filters.command, spot_name)],
-                2: [MessageHandler(~ Filters.command, spot_lat)],
-                3: [MessageHandler(~ Filters.command, spot_lon)],
-                4: [MessageHandler(~ Filters.photo, spot_photo)]},
+                2: [MessageHandler(~ Filters.command, spot_cords)],
+                3: [MessageHandler(~ Filters.command, spot_photo)]},
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )
-
-    get_cords = CommandHandler('my_cords', user_cords)
-    get_list_spots = CommandHandler('nearest_spots', nearest_spots)
 
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
@@ -337,6 +451,12 @@ def main():
     dp.add_handler(new_spot)
     dp.add_handler(get_list_spots)
     dp.add_handler(get_cords)
+
+    dp.add_handler(CommandHandler("timer", timer))
+    dp.add_handler(CommandHandler("set_timer", set_timer))
+    dp.add_handler(CommandHandler("close", unset))
+    dp.add_handler(CommandHandler("back", back))
+
     updater.start_polling()
 
 
