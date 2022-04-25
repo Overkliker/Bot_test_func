@@ -16,7 +16,6 @@ from telegram.ext import (
     ConversationHandler, CallbackContext,
 )
 
-import asyncio
 import datetime
 
 
@@ -356,10 +355,27 @@ def set_timer(update, context):
         if due < 0:
             update.message.reply_text('Извините, не умеем возвращаться в прошлое')
             return
+        delta = datetime.timedelta(days=0,
+                                   seconds=2,
+                                   microseconds=0,
+                                   milliseconds=0,
+                                   minutes=0,
+                                   hours=0,
+                                   weeks=0)
 
+        last_time = datetime.datetime.now() + datetime.timedelta(days=0,
+                                                                   seconds=30,
+                                                                   microseconds=0,
+                                                                   milliseconds=0,
+                                                                   minutes=0,
+                                                                   hours=0,
+                                                                   weeks=0)
+
+        first_inter = datetime.datetime.now()
         job_removed = remove_job_if_exists(str(chat_id), context)
-        context.job_queue.run_once(task, due, context=chat_id, name=str(chat_id))
-
+        context.job_queue.run_repeating(task, interval=delta, first=first_inter, last=last_time, context=chat_id, name=str(chat_id))
+        print(last_time)
+        print()
         text = f"Засек {due} секунд!"
         context.bot_data.update({"timer": due})
         if job_removed:
@@ -402,6 +418,7 @@ def timer(update: Update, context: CallbackContext):
 
 
 def task(context):
+    print('itjdkf')
     timer_markup = cups(KB_TIMER)
     job = context.job
     time_duration = context.bot_data["timer"]
