@@ -7,6 +7,7 @@ import telegram
 from data import db_session
 from data.user import User
 from data.spots import Spot
+from data.like_spots import Like
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, Bot
 from telegram.ext import (
     Updater,
@@ -19,8 +20,6 @@ from telegram.ext import (
 import datetime
 
 
-
-
 reply_keyboard = [['/start', '/help']]
 db_session.global_init("data/tg_bot.db")
 db_sess = db_session.create_session()
@@ -29,9 +28,9 @@ URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
 
 START_KEYBOARD = ['/start']
-STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/timer', '/help']
-KB_TIMER = [["/set_timer 30", "/set_timer 60", "/set_timer 300"],
-                  ["/back"]]
+STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/set_timer', '/close_timer', '/help']
+# KB_TIMER = [["/set_timer 30", "/set_timer 60", "/set_timer 300"],
+#                   ["/back"]]
 
 CLOSE_TIMER = [["/close"]]
 
@@ -348,35 +347,56 @@ def nearest_spots(update, context):
 
 
 ########################## Add timer #########################
+def time(update, context):
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('ТЫ КАК ВООБЩЕ СЮДА ПОПАЛ?! Сходи и зарегистрируйся'
+                                  ' сначала, для этого нажми на кнопку /start', reply_markup=markup)
+        return ConversationHandler.END
+    markup = cups(["/stop_timer"], one_time=True)
+    update.message.reply_text('Здесь ты можешь засечь таймер для тренировок.'
+                              ' Отсчёт начинается с момента начала и ставиться на месяц,'
+                              ' что-бы поставить таймер напиши через сколько часов хочешь, что бы он срабатывал,'
+                              ' а если хочешь выйти - то пропиши /stop_timer', reply_markup=markup)
+    return 1
+
 def set_timer(update, context):
     chat_id = update.message.chat_id
     try:
-        due = int(context.args[0])
+        due = int(update.message.text)
         if due < 0:
             update.message.reply_text('Извините, не умеем возвращаться в прошлое')
             return
         delta = datetime.timedelta(days=0,
-                                   seconds=2,
+                                   seconds=0,
                                    microseconds=0,
                                    milliseconds=0,
                                    minutes=0,
-                                   hours=0,
+                                   hours=due,
                                    weeks=0)
 
-        last_time = datetime.datetime.now() + datetime.timedelta(days=0,
-                                                                   seconds=30,
-                                                                   microseconds=0,
-                                                                   milliseconds=0,
-                                                                   minutes=0,
-                                                                   hours=0,
-                                                                   weeks=0)
-
-        first_inter = datetime.datetime.now()
+        last_time = datetime.timedelta(days=30,
+                                       seconds=0,
+                                       microseconds=0,
+                                       milliseconds=0,
+                                       minutes=0,
+                                       hours=0,
+                                       weeks=0)
         job_removed = remove_job_if_exists(str(chat_id), context)
-        context.job_queue.run_repeating(task, interval=delta, first=first_inter, last=last_time, context=chat_id, name=str(chat_id))
+        context.job_queue.run_repeating(task, interval=delta, first=0, last=last_time, context=chat_id, name=str(chat_id))
         print(last_time)
         print()
-        text = f"Засек {due} секунд!"
+        if 1 < int(due) < 4:
+            text = f"Засек {due} часа!"
+
+        elif int(due) == 1 or 21:
+            text = f"Засек {due} час!"
+
+        elif int(due) > 4 or 22:
+            text = f"Засек {due} часов!"
+
+        markup = cups(STANDART_KEYBOARD_1)
+        update.message.reply_text(text, reply_markup=markup)
         context.bot_data.update({"timer": due})
         if job_removed:
             text += ' Старая задача удалена.'
@@ -387,10 +407,12 @@ def set_timer(update, context):
                                  reply_markup=close_timer_markup)
 
     except (IndexError, ValueError):
-        update.message.reply_text('Использование: /set_timer <секунд>')
+        update.message.reply_text('Использование: <часов>')
 
     except telegram.error.BadRequest:
         pass
+
+    return ConversationHandler.END
 
 
 def remove_job_if_exists(name, context):
@@ -403,6 +425,11 @@ def remove_job_if_exists(name, context):
 
 
 def unset(update, context):
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('Сходи и зарегистрируйся для начала /start', reply_markup=markup)
+        return
+
     chat_id = update.message.chat_id
     job_removed = remove_job_if_exists(str(chat_id), context)
     text = 'Таймер отменен!' if job_removed else 'У вас нет активных таймеров'
@@ -412,25 +439,26 @@ def unset(update, context):
                              reply_markup=timer_markup)
 
 
-def timer(update: Update, context: CallbackContext):
-    context.bot.send_message(chat_id=update.effective_chat.id,
-                             text="Здесь ты можешь завести таймер")
-
-
 def task(context):
     print('itjdkf')
-    timer_markup = cups(KB_TIMER)
     job = context.job
     time_duration = context.bot_data["timer"]
-    text = f"{time_duration} сек истекло"
-    context.bot.send_message(job.context, text=text)
+    if 1 < int(time_duration) < 4:
+        text = f"{time_duration} часа истекло"
+        context.bot.send_message(job.context, text=text)
+
+    elif int(time_duration) == 1 or 21:
+        text = f"{time_duration} час истек"
+        context.bot.send_message(job.context, text=text)
+
+    elif int(time_duration) > 4 or 24:
+        text = f"{time_duration} часа истекло"
+        context.bot.send_message(job.context, text=text)
 
 
-def back(update: Update, context: CallbackContext):
+def back(update, context):
     start_markup = cups(STANDART_KEYBOARD_1)
-    context.bot.send_message(chat_id=update.effective_chat.id,
-                             text="Выберите функцию",
-                             reply_markup=start_markup)
+    update.message.reply_text('Значит сам себе будешь напоминать о тренировках!', reply_markup=start_markup)
 
 
 ###################### main func ##################
@@ -462,6 +490,14 @@ def main():
         fallbacks=[CommandHandler('stop_spot', spot_stopping)]
     )
 
+    timer_dialog = ConversationHandler(
+        entry_points=[CommandHandler('set_timer', time, pass_chat_data=True)],
+        states={
+            1: [MessageHandler(~ Filters.command, set_timer)]
+        },
+        fallbacks=[CommandHandler('stop_timer', back)]
+    )
+
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
     dp.add_handler(location)
@@ -469,10 +505,8 @@ def main():
     dp.add_handler(get_list_spots)
     dp.add_handler(get_cords)
 
-    dp.add_handler(CommandHandler("timer", timer))
-    dp.add_handler(CommandHandler("set_timer", set_timer))
-    dp.add_handler(CommandHandler("close", unset))
-    dp.add_handler(CommandHandler("back", back))
+    dp.add_handler(timer_dialog)
+    dp.add_handler(CommandHandler("close_timer", unset))
 
     updater.start_polling()
 
