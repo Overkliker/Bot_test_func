@@ -1,5 +1,5 @@
 import logging
-from help_defs import is_float, search_adress
+from help_defs import is_float, search_adress, map_api_server
 
 import requests
 import telegram
@@ -7,7 +7,7 @@ import telegram
 from data import db_session
 from data.user import User
 from data.spots import Spot
-from data.like_spots import Like
+# from data.like_spots import Like
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, Bot
 from telegram.ext import (
     Updater,
@@ -35,6 +35,8 @@ STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/set_timer', '/cl
 CLOSE_TIMER = [["/close"]]
 
 REG_COUNTER = 0
+
+OLD_SPOTS = []
 
 
 def cups(name, one_time=False):
@@ -103,6 +105,7 @@ def f_res(update, context):
 # Rename user in DB
 def rename(update, context):
     global REG_COUNTER
+
     if update.message.text.lower() == 'нет':
         user = db_sess.query(User).filter(User.id == update.message.from_user['id']).one()
         context.user_data['name'] = user.name
@@ -110,6 +113,7 @@ def rename(update, context):
         markup = cups(STANDART_KEYBOARD_1)
         update.message.reply_text('Ой! А я вас помню!', reply_markup=markup)
         return ConversationHandler.END
+
     print('kjy')
     yes_rename(update, context)
 
@@ -337,13 +341,48 @@ def user_cords(update, context):
 
 ###################### Get nearest spots #####################
 def nearest_spots(update, context):
-    spots = requests.get('Здесь будет сделан запрос в базу данных через rest-api').json()
+    print(REG_COUNTER)
+    global OLD_SPOTS
+    if REG_COUNTER == 0:
+        markup = cups(START_KEYBOARD)
+        update.message.reply_text('ТЫ КАК ВООБЩЕ СЮДА ПОПАЛ?! Сходи и зарегистрируйся'
+                                  ' сначала, для этого нажми на кнопку /start', reply_markup=markup)
+        return ConversationHandler.END
+    us_id = update.message.from_user['id']
     l_spots = []
-    for i in spots:
-        l_spots.append(i['name'])
 
-    for i in l_spots:
-        bot.send_photo(chat_id=update.message.chat_id, photo=l_spots[0], caption=spots[1])
+    spots_api = requests.get(f'http://127.0.0.1:5000/api/get_spots/{us_id}').json()
+    OLD_SPOTS.clear()
+    del_lat = str(spots_api['delta_lat'] - 0.03)
+    del_lon = str(spots_api['delta_lon'] - 0.03)
+
+    lat = str(spots_api['spots'][0]['lat'])
+    lon = str(spots_api['spots'][0]['lon'])
+    print(spots_api)
+    names = []
+    for i in spots_api['spots']:
+        OLD_SPOTS.append(i)
+        names.append(i['name'])
+
+
+    print(names)
+
+    map_params = {
+        "ll": ",".join([lon, lat]),
+        "spn": ",".join([del_lat, del_lon]),
+        "l": 'map',
+        "pt": ",".join([lon, lat, "pm2rdm"])
+    }
+    response = requests.get(map_api_server, params=map_params)
+    print(response.url)
+    bot.send_photo(chat_id=update.message.chat_id, photo=response.url)
+
+
+    # for i in spots:
+    #     l_spots.append(i['name'])
+    #
+    # for i in l_spots:
+    #     bot.send_photo(chat_id=update.message.chat_id, photo=l_spots[0], caption=spots[1])
 
 
 ########################## Add timer #########################
@@ -359,6 +398,7 @@ def time(update, context):
                               ' что-бы поставить таймер напиши через сколько часов хочешь, что бы он срабатывал,'
                               ' а если хочешь выйти - то пропиши /stop_timer', reply_markup=markup)
     return 1
+
 
 def set_timer(update, context):
     chat_id = update.message.chat_id
@@ -497,6 +537,7 @@ def main():
         },
         fallbacks=[CommandHandler('stop_timer', back)]
     )
+    near_spots = CommandHandler('nearest_spots', nearest_spots)
 
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
@@ -504,6 +545,7 @@ def main():
     dp.add_handler(new_spot)
     dp.add_handler(get_list_spots)
     dp.add_handler(get_cords)
+    dp.add_handler(near_spots)
 
     dp.add_handler(timer_dialog)
     dp.add_handler(CommandHandler("close_timer", unset))

@@ -51,3 +51,8 @@ def search_adress(address):
         return toponym_lattitude, toponym_longitude
     except IndexError:
         raise FileNotFoundError  # вывести ошибку ненахождения объекта
+
+
+################### FOR POINTS ON MAP ###############
+
+map_api_server = "http://static-maps.yandex.ru/1.x/"

@@ -8,12 +8,13 @@ spots_blueprint = Blueprint(
     'spots_api',
     __name__
 )
-
+db_session.global_init("data/tg_bot.db")
 
 @spots_blueprint.route('/api/get_spots/<int:user_id>', methods=['GET'])
 def return_spots(user_id):
+
     session = db_session.create_session()
-    spots = session.query(User.lat, User.lon).filter(User.id == 785760784).one()
+    spots = session.query(User.lat, User.lon).filter(User.id == user_id).one()
     lat = compute_delta(spots[0])
     lon = compute_delta(spots[1])
 
@@ -26,8 +27,18 @@ def return_spots(user_id):
     bet_lon1 = spots[1] - around_lon
     bet_lon2 = spots[1] + around_lon
 
-    good_cords = session.query(Spot).filter((Spot.lat.between(bet_lat1, bet_lat2)) and
+    good_cords = session.query(Spot).filter((Spot.lat.between(bet_lat1, bet_lat2)),
                                             (Spot.lon.between(bet_lon1, bet_lon2)))
+
+    return jsonify(
+        {
+            'spots':
+                [item.to_dict()
+                 for item in good_cords],
+            'delta_lat': around_lat,
+            'delta_lon': around_lon
+        }
+    )
 
 
 @spots_blueprint.route('/users/select/<id_>/cords')
