@@ -1,4 +1,3 @@
-import logging
 from help_defs import is_float, search_adress, map_api_server
 
 import requests
@@ -28,7 +27,8 @@ URL = 'https://api.telegram.org/bot/'
 bot = Bot(TOKEN)
 
 START_KEYBOARD = ['/start']
-STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/set_timer', '/close_timer', '/help']
+STANDART_KEYBOARD_1 = ['/find_loc', '/add_spot', '/my_cords', '/set_timer',
+                       '/close_timer', '/nearest_spots', '/help', '/bug']
 # KB_TIMER = [["/set_timer 30", "/set_timer 60", "/set_timer 300"],
 #                   ["/back"]]
 
@@ -359,30 +359,41 @@ def nearest_spots(update, context):
     lat = str(spots_api['spots'][0]['lat'])
     lon = str(spots_api['spots'][0]['lon'])
     print(spots_api)
-    names = []
+    ids = []
     for i in spots_api['spots']:
         OLD_SPOTS.append(i)
-        names.append(i['name'])
+        ids.append(i['id'])
 
 
-    print(names)
-
+    print(ids)
+    print(OLD_SPOTS)
     map_params = {
         "ll": ",".join([lon, lat]),
         "spn": ",".join([del_lat, del_lon]),
         "l": 'map',
-        "pt": ",".join([lon, lat, "pm2rdm"])
+        "pt": "~".join([",".join([str(elem['lon']), str(elem['lat']), f"pm2rdm{elem['id']}"]) for elem in OLD_SPOTS])
     }
     response = requests.get(map_api_server, params=map_params)
     print(response.url)
-    bot.send_photo(chat_id=update.message.chat_id, photo=response.url)
+
+    clava = []
+    for i in OLD_SPOTS:
+        clava.append(f'/map_point {str(i["id"])}')
+
+    text = 'Что-бы вывести подробности о точке - введи комманду /map_point <цифра на нужной метке>'
+    bot.send_photo(chat_id=update.message.chat_id, photo=response.url, caption=text)
+    update.message.reply_text('Вот клавиатура для простоты', reply_markup=cups(clava, one_time=True))
 
 
-    # for i in spots:
-    #     l_spots.append(i['name'])
-    #
-    # for i in l_spots:
-    #     bot.send_photo(chat_id=update.message.chat_id, photo=l_spots[0], caption=spots[1])
+####################### MAP POINTS ########################
+def get_point(update, context: CallbackContext):
+    cont = int(context.args[0])
+    for i in OLD_SPOTS:
+        if cont == i['id']:
+            text = f'Координаты спота (широта, долгота): {i["lat"], i["lon"]}; Название: {i["name"]}'
+            bot.send_photo(chat_id=update.message.chat_id, photo=i['photo'], caption=text)
+            markup = cups(STANDART_KEYBOARD_1)
+            update.message.reply_text('Что дальше?', reply_markup=markup)
 
 
 ########################## Add timer #########################
@@ -501,6 +512,12 @@ def back(update, context):
     update.message.reply_text('Значит сам себе будешь напоминать о тренировках!', reply_markup=start_markup)
 
 
+########################### DEBUG ####################################
+def debug(update, context):
+    markup = cups(STANDART_KEYBOARD_1)
+    update.message.reply_text("Нашли неполадку? Напишите в тех-поддержку описав её. Адресс тех-поддержки: danilahreno@gmail.com",
+                              reply_markup=markup)
+
 ###################### main func ##################
 def main():
     updater = Updater('5158943754:AAHR2r7utRWAJORTSKqmI-p6sUq06cNoVQw', use_context=True)
@@ -538,6 +555,8 @@ def main():
         fallbacks=[CommandHandler('stop_timer', back)]
     )
     near_spots = CommandHandler('nearest_spots', nearest_spots)
+    points = CommandHandler('map_point', get_point)
+    bug = CommandHandler('bug', debug)
 
     dp.add_handler(CommandHandler('help', help))
     dp.add_handler(start_handler)
@@ -546,6 +565,8 @@ def main():
     dp.add_handler(get_list_spots)
     dp.add_handler(get_cords)
     dp.add_handler(near_spots)
+    dp.add_handler(points)
+    dp.add_handler(bug)
 
     dp.add_handler(timer_dialog)
     dp.add_handler(CommandHandler("close_timer", unset))
